@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="Code Coverage">
+        <Configuration>
+          <CodeCoverage>
+            <Sources>
+              <Exclude>
+                <Source>.*\.g\.cs$</Source>
+                <Source>.*\.generated\.cs$</Source>
+              </Exclude>
+            </Sources>
+            <ModulePaths>
+              <Exclude>
+                <ModulePath>.*\.Tests\.dll$</ModulePath>
+                <ModulePath>.*ProcurementCopilot\.Testing\.dll$</ModulePath>
+              </Exclude>
+            </ModulePaths>
+          </CodeCoverage>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>

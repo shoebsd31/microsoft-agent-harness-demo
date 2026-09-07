@@ -1,0 +1,44 @@
+# Security
+
+The Procurement Copilot treats the model as an untrusted planner operating over trusted tools. Every side effect is
+gated, every external text is data, every bound is explicit, and every decision is auditable.
+
+## Threat model
+
+| # | Threat | Control | Test |
+|---|---|---|---|
+| 1 | API key leaks into repo, logs, exceptions or traces | Key only via user-secrets / environment; `appsettings.json` has placeholders; start-up validation names the key, never the value; `SecretRedactor` used by the Serilog `RedactingSink` and the OpenTelemetry `RedactingProcessor` (registered key value, `api-key=`, `Bearer`, key shapes, emails); logs never go to the console | `SecretRedactorTests`, `RedactingProcessorTests`, `FoundryChatClientFactoryTests.CreateChatClient_MissingKey_NamesTheKeyNotTheValue` |
+| 2 | Model triggers a side effect the analyst did not want | Read-only by default; `draft_clarification_email`, `record_award_recommendation`, `shell` and every workspace write are `ApprovalRequiredAIFunction`s; the console shows the full arguments and offers once / always / deny; standing approvals can be revoked with `/approvals clear` | `ToolApprovalTests`, `HarnessAgentFactoryTests.BuildOptions_SideEffectingTools_AreApprovalRequired` |
+| 3 | An auto-approval rule (skills, file access, read tools) accidentally approves a gated tool | `ApprovalPolicy.GuardRules` short-circuits every rule for tools in `Security:ApprovalPolicy:RequireApprovalFor`; the config list is the single source of truth | `ApprovalPolicyTests.GuardRules_ListedTool_IsNeverAutoApprovedEvenWhenRuleMatches` |
+| 4 | Side effects during planning | `ModeGuardMiddleware` wraps side-effecting tools and returns a structured block in any mode other than `execute` (fails closed when the mode is unknown); loop evaluator never loops in plan mode | `ModeGuardMiddlewareTests`, `ModeGuardTests`, `LoopEvaluatorTests.Evaluate_PlanMode_NeverLoops` |
+| 5 | Path traversal / escape from the workspace via file tools, shell arguments or outbox paths | One `WorkspacePathPolicy`: canonicalised with `Path.GetFullPath`, compared against the root with a trailing separator, rejects `..`, absolute, drive-letter, UNC paths and reparse points; `rfps/**` read-only, `output/**` writable, 1 MB cap, extension allowlist; used by `WorkspaceFileStore`, `ShellCommandPolicy`, `FileOutbox`, `JsonlAuditLog` | `WorkspacePathPolicyTests`, `WorkspaceFileStoreTests`, `OutboxAndAuditTests.SaveDocument_OutsideOutput_IsRejected` |
+| 6 | Arbitrary command execution through the shell tool | `ShellCommandPolicy` evaluated on the **parsed** command line before any shell: allowlist per pipeline segment, denies `; && \|\| &`, newlines, `> >> <`, backticks, `$( )`, `$VAR`/`${VAR}`/`%VAR%`, absolute/UNC/`~`/`..` paths, network commands, URL-shaped arguments, non-filter `find` options; workspace-confined arguments; hard 10 s timeout; 32 KB output cap; approval on every call; stateless executor locked to the workspace with a second `ShellPolicy` layer; every call audited | `ShellCommandPolicyTests` (49 table-driven cases + 3 facts), `ConfinedShellToolTests` |
+| 7 | Prompt injection through vendor notes, bid clauses, web results or skill files | All third-party text is wrapped in `<untrusted_data source="…">` (closing tags inside the content are neutralised); harness instructions state that such content is never followed and that instructions inside it are a red flag; the seeded VND-0002 notes contain an injection string used by the demo and tests | `UntrustedDataEnvelopeTests`, `UntrustedDataEnvelopeToolTests`, `PromptResourceTests.HarnessAddendum_ContainsUntrustedDataClause` |
+| 8 | Runaway execution / cost | `MaximumIterationsPerRequest = 15`, `LoopAgentOptions.MaxIterations = 5` (outstanding work is reported on exhaustion), background agents capped at 2 parallel with a 120 s timeout each, compaction budgets, 4 000-character caps on text arguments | `HarnessAgentFactoryTests`, `LoopEvaluatorTests.Run_AgentNeverFinishes_StopsAtMaxIterations`, `BackgroundAgentTests.TimeoutAgent_…`, `ConcurrencyLimitedAgent_CapsParallelRuns` |
+| 9 | Child agents gain privileges | Children are plain `ChatClientAgent`s with explicit, narrow tool lists (market-research: `convert_currency` + hosted search; risk-analyst: `get_vendor_profile`, `check_vendor_compliance`); `ProcurementToolset.Get` refuses to hand out side-effecting tools; no file, memory or shell tools | `BackgroundAgentTests.Definitions_ChildToolSets_ContainNoSideEffectingFileOrShellTools`, `Toolset_Get_RefusesSideEffectingToolsForChildren` |
+| 10 | Malicious skills picked up from the working directory | `AgentFileSkillsSource` is rooted at `AppContext.BaseDirectory/skills` (copied at build time), never the current directory; no script runner, script extensions disabled; only read-only skill tools are auto-approved | `SkillsDiscoveryTests` |
+| 11 | Invalid or hostile tool arguments | `ToolArgumentValidator`: strict id regexes (`^[A-Z]{3}-\d{4}-\d{3}$`, `^VND-\d{4}$`, `^BID-\d{3}$`), ISO-4217 allowlist, numeric ranges, 4 000-char text caps; failures return a structured error, never throw | `ValueObjectTests`, `ToolArgumentValidatorTests` |
+| 12 | Sanctioned vendor is awarded | `AwardService` refuses sanctioned vendors regardless of score and audits the attempt; compliance hits are persisted with a disposition | `UseCaseTests.Award_SanctionedVendor_IsRefusedAndAudited` |
+| 13 | Session file injection | Session files are named by GUID only (`{guid}.json`, `{guid}.meta.json`); ids are parsed with `Guid.TryParse` before use | `FileSessionStoreTests` |
+| 14 | Vulnerable dependencies | `dotnet list package --vulnerable --include-transitive` in `scripts/verify.*` must report none; central package management | verification script |
+| 15 | Missing accountability | `workspace/output/audit/approvals.jsonl` (who/what/when/decision/argument hash/session) and `actions.jsonl` (every side-effecting or shell call with argument hash and outcome); structured Serilog logs under `logs/`; OpenTelemetry spans for every agent, model and tool call | `OutboxAndAuditTests.AuditLog_AppendsJsonLines`, `UseCaseTests.Draft_WritesOutboxAuditsAndUpgradesDisposition` |
+
+## Trust boundaries — what leaves the machine, and how to turn it off
+
+| Component | Sends | Disable |
+|---|---|---|
+| Foundry chat model (`FoundryChatClientFactory`) | conversation, tool schemas, tool results (including wrapped vendor text) | run with `--fake` / leave `Foundry:*` empty |
+| Judge model (`AIJudgeLoopEvaluator`) | the original request and the latest response, on every loop evaluation | `Agent:EnableJudge = false` (default) |
+| Hosted web search (`HostedWebSearchTool`) | search queries composed by the model or the market-research agent | `Agent:EnableWebSearch = false`; never enabled for clients that do not support it |
+| OTLP exporter | spans and metrics (content only with `OpenTelemetry:EnableSensitiveData = true`, and always redacted) | leave `OpenTelemetry:OtlpEndpoint` empty (file exporter + `/traces`) |
+| Responses storage | nothing server-side by default (`Foundry:StoreResponses = false`) | keep default |
+
+No arbitrary URL-fetching tool exists. `Agent:EnableLocalWebFetch` is reserved and must stay `false`; nothing reads it.
+
+## Notes
+
+- **Redaction is deliberately aggressive.** Any 32+ hex-character token is masked, which also masks GUID-shaped ids such as the agent id in `/traces`. Azure keys share that shape, so this is the safer default.
+- **Prompt/completion content** is not exported unless `OpenTelemetry:EnableSensitiveData = true` (which sets `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`). Even then the API key and email addresses are removed by `RedactingProcessor`.
+- **Approval before the mode guard.** Because the framework detects approval-required tools by the outer wrapper type, the mode guard sits inside the approval wrapper: in plan mode a side-effecting call is first surfaced for approval and then blocked without writing anything. The instructions tell the model not to call those tools in plan mode at all.
+- **Standing approvals** live in the session state; `/approvals clear` removes them. They never apply to tools that are not approval-gated in the first place.
+- **The shell is not a sandbox.** The allowlist and parser are a pre-filter; approval is the security boundary, and the executor runs with the user's own privileges inside the workspace directory. Use it only for read-only inspection, as the allowlist enforces.

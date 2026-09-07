@@ -1,0 +1,24 @@
+[
+  {
+    "id": "RFP-2026-017",
+    "title": "Supply of 40 CNC vertical machining centres",
+    "description": "Contoso Industrial Systems requires forty (40) 3-axis CNC vertical machining centres (minimum 1,000 x 500 mm table, 12,000 rpm spindle, 30-tool ATC) for the Rotterdam plant expansion, delivered DAP Rotterdam, installed and commissioned. Bids are evaluated in EUR.",
+    "quantity": 40,
+    "currency": "EUR",
+    "status": "Open",
+    "category": "Machine Tools",
+    "criteria": { "price": 35, "leadTime": 20, "warranty": 15, "technical": 20, "sustainability": 10 },
+    "requiredCertifications": [ "ISO 9001", "CE" ]
+  },
+  {
+    "id": "RFP-2026-012",
+    "title": "Annual supply of cutting fluids and coolants",
+    "description": "Framework agreement for cutting fluids across all EU plants. Awarded 2026-05-14.",
+    "quantity": 1,
+    "currency": "EUR",
+    "status": "Closed",
+    "category": "Industrial Equipment",
+    "criteria": { "price": 50, "leadTime": 10, "warranty": 0, "technical": 30, "sustainability": 10 },
+    "requiredCertifications": [ "ISO 9001" ]
+  }
+]

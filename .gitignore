@@ -1,0 +1,39 @@
+# Build output
+bin/
+obj/
+*.dll
+*.pdb
+*.exe
+!scripts/**
+
+# IDE / OS
+.vs/
+.idea/
+*.user
+*.suo
+*.swp
+*.orig
+.DS_Store
+Thumbs.db
+
+# Test and coverage artefacts (Microsoft.Testing.Platform writes TestResults/ next to each test project too)
+TestResults/
+*.coverage
+coverage*.xml
+*.trx
+
+# Runtime output of the harness (written next to the executable; the repo copies are seeds only)
+logs/
+*.log
+traces-*.jsonl
+workspace/output/**
+!workspace/output/.gitkeep
+workspace/agent-file-memory/
+
+# Secrets — never commit real credentials; use `dotnet user-secrets` or environment variables
+secrets.json
+.env
+.env.*
+appsettings.*.local.json
+appsettings.Development.json
+appsettings.Production.json

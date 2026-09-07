@@ -1,0 +1,62 @@
+[
+  {
+    "id": "BID-001",
+    "rfpId": "RFP-2026-017",
+    "vendorId": "VND-0001",
+    "unitPrice": 185000,
+    "currency": "EUR",
+    "leadTimeWeeks": 16,
+    "warrantyMonths": 24,
+    "technicalCompliancePercent": 96,
+    "deliveryClause": "Delivery DAP Rotterdam within 16 weeks of purchase order, installation and commissioning included.",
+    "notes": "Price includes two days of operator training per machine."
+  },
+  {
+    "id": "BID-002",
+    "rfpId": "RFP-2026-017",
+    "vendorId": "VND-0002",
+    "unitPrice": 168500,
+    "currency": "EUR",
+    "leadTimeWeeks": 20,
+    "warrantyMonths": 18,
+    "technicalCompliancePercent": 91,
+    "deliveryClause": "Delivery DAP Rotterdam within 20 weeks of purchase order.",
+    "notes": "Spindle is 10,000 rpm; 12,000 rpm available at surcharge. ISO 14001 certification in progress."
+  },
+  {
+    "id": "BID-003",
+    "rfpId": "RFP-2026-017",
+    "vendorId": "VND-0003",
+    "unitPrice": 199000,
+    "currency": "USD",
+    "leadTimeWeeks": 14,
+    "warrantyMonths": 36,
+    "technicalCompliancePercent": 94,
+    "deliveryClause": "Delivery DAP Rotterdam within 14 weeks of purchase order; commissioning by Eindhoven service hub.",
+    "notes": "Quoted in US dollars. Price valid 90 days."
+  },
+  {
+    "id": "BID-004",
+    "rfpId": "RFP-2026-017",
+    "vendorId": "VND-0004",
+    "unitPrice": 149900,
+    "currency": "EUR",
+    "leadTimeWeeks": 12,
+    "warrantyMonths": 12,
+    "technicalCompliancePercent": 88,
+    "deliveryClause": "Delivery DAP Rotterdam within 12 weeks of purchase order.",
+    "notes": "Lowest price guaranteed."
+  },
+  {
+    "id": "BID-005",
+    "rfpId": "RFP-2026-017",
+    "vendorId": "VND-0005",
+    "unitPrice": 176000,
+    "currency": "EUR",
+    "leadTimeWeeks": 18,
+    "warrantyMonths": 30,
+    "technicalCompliancePercent": 98,
+    "deliveryClause": "Delivery within 18 weeks of order, or upon availability of ocean freight from Kobe, whichever is later; DAP terms to be confirmed.",
+    "notes": "Ambiguous whether 18 weeks is a commitment; freight availability clause may extend delivery indefinitely."
+  }
+]

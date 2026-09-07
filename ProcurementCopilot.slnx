@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ProcurementCopilot.Agent/ProcurementCopilot.Agent.csproj" />
+    <Project Path="src/ProcurementCopilot.Application/ProcurementCopilot.Application.csproj" />
+    <Project Path="src/ProcurementCopilot.Console/ProcurementCopilot.Console.csproj" />
+    <Project Path="src/ProcurementCopilot.Domain/ProcurementCopilot.Domain.csproj" />
+    <Project Path="src/ProcurementCopilot.Infrastructure/ProcurementCopilot.Infrastructure.csproj" />
+    <Project Path="src/ProcurementCopilot.Testing/ProcurementCopilot.Testing.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ProcurementCopilot.Agent.Tests/ProcurementCopilot.Agent.Tests.csproj" />
+    <Project Path="tests/ProcurementCopilot.Application.Tests/ProcurementCopilot.Application.Tests.csproj" />
+    <Project Path="tests/ProcurementCopilot.Domain.Tests/ProcurementCopilot.Domain.Tests.csproj" />
+    <Project Path="tests/ProcurementCopilot.Integration.Tests/ProcurementCopilot.Integration.Tests.csproj" />
+  </Folder>
+</Solution>

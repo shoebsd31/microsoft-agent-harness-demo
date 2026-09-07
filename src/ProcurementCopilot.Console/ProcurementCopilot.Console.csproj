@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <UserSecretsId>procurement-copilot-9c1f0c2e</UserSecretsId>
+    <RootNamespace>ProcurementCopilot.ConsoleApp</RootNamespace>
+    <AssemblyName>ProcurementCopilot.Console</AssemblyName>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ProcurementCopilot.Agent\ProcurementCopilot.Agent.csproj" />
+    <ProjectReference Include="..\ProcurementCopilot.Infrastructure\ProcurementCopilot.Infrastructure.csproj" />
+    <ProjectReference Include="..\ProcurementCopilot.Testing\ProcurementCopilot.Testing.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" />
+    <PackageReference Include="Spectre.Console" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Skills are discovered from the application base directory, never from the current working directory. -->
+    <Content Include="$(RepoRoot)skills\**\*" Link="skills\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="$(RepoRoot)data\*" Link="data\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="$(RepoRoot)workspace\rfps\**\*" Link="workspace\rfps\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

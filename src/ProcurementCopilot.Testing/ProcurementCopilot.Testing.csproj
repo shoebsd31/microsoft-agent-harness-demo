@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Fakes shared by the test projects and by the console offline demo (fake mode). -->
+  <ItemGroup>
+    <ProjectReference Include="..\ProcurementCopilot.Application\ProcurementCopilot.Application.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Agents.AI" />
+    <PackageReference Include="Microsoft.Extensions.AI" />
+  </ItemGroup>
+</Project>

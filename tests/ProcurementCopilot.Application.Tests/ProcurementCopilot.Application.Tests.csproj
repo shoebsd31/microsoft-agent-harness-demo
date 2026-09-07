@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ProcurementCopilot.Application\ProcurementCopilot.Application.csproj" />
+    <ProjectReference Include="..\..\src\ProcurementCopilot.Infrastructure\ProcurementCopilot.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\ProcurementCopilot.Testing\ProcurementCopilot.Testing.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Shouldly" />
+    <PackageReference Include="NSubstitute" />
+    <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="$(RepoRoot)data\*" Link="data\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
