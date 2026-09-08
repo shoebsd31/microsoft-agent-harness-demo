@@ -7,13 +7,20 @@ public sealed class PromptCatalog
 {
     private const string Prefix = "Prompts.";
 
+    private const string OrganisationPlaceholder = "{{Organisation}}";
     private readonly Dictionary<string, string> _cache = new(StringComparer.Ordinal);
 
+    /// <summary>Organisation name substituted for the organisation placeholder in the prompts.</summary>
+    public string Organisation { get; set; } = "Contoso Industrial Systems";
+
     /// <summary>Harness-level procurement guidance appended to <c>HarnessAgent.DefaultInstructions</c>.</summary>
-    public string HarnessAddendum => Load("harness-instructions.md");
+    public string HarnessAddendum => Render(Load("harness-instructions.md"));
 
     /// <summary>Agent-level persona and output-style instructions.</summary>
-    public string AgentInstructions => Load("agent-instructions.md");
+    public string AgentInstructions => Render(Load("agent-instructions.md"));
+
+    /// <summary>Replaces the organisation placeholder.</summary>
+    public string Render(string text) => text.Replace(OrganisationPlaceholder, Organisation, StringComparison.Ordinal);
 
     /// <summary>Instructions for the market-research background agent.</summary>
     public string MarketResearchInstructions => Load("market-research-instructions.md");

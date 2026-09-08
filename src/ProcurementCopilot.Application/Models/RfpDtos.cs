@@ -40,7 +40,10 @@ public sealed record VendorProfile(
     string Country,
     IReadOnlyList<string> Certifications,
     int YearsTrading,
-    string Notes);
+    string Notes,
+    int? CreditRating = null,
+    bool? PreferredVendor = null,
+    bool Active = true);
 
 /// <summary>Result of <c>convert_currency</c>.</summary>
 public sealed record CurrencyConversion(decimal Amount, string From, decimal Converted, string To, decimal Rate, string RateDate, string Source);

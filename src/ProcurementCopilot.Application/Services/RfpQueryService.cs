@@ -80,7 +80,7 @@ public sealed class RfpQueryService
         return vendor is null
             ? DomainErrors.NotFound.Vendor
             : new VendorProfile(vendor.Id.Value, vendor.Name, vendor.Country, vendor.Certifications, vendor.YearsTrading,
-                UntrustedDataEnvelope.ForVendor(vendor.Id.Value, vendor.Notes));
+                UntrustedDataEnvelope.ForVendor(vendor.Id.Value, vendor.Notes), vendor.CreditRating, vendor.IsPreferred, vendor.IsActive);
     }
 
     private void MarkActive(RfpId id)

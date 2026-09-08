@@ -1,5 +1,6 @@
 using ProcurementCopilot.Application.Services;
 using ProcurementCopilot.Infrastructure.Data;
+using ProcurementCopilot.Infrastructure.Outbox;
 using ProcurementCopilot.Infrastructure.Repositories;
 using ProcurementCopilot.Testing.Fakes;
 
@@ -20,7 +21,7 @@ public sealed class ServiceFixture
         Evaluation = new BidEvaluationService(Rfps, Bids, Vendors, Currency, State);
         Compliance = new ComplianceService(Vendors, Rfps, Sanctions, State);
         Clarifications = new ClarificationService(Vendors, Outbox, Audit, State, Clock);
-        Awards = new AwardService(Rfps, Vendors, Sanctions, Outbox, Audit, State, Clock);
+        Awards = new AwardService(Rfps, Vendors, Bids, Sanctions, Currency, new FileAwardRecorder(Outbox), Audit, State, Clock);
     }
 
     public InMemoryEvaluationStateStore State { get; } = new();

@@ -1,0 +1,66 @@
+@page "/restricted"
+@rendermode InteractiveServer
+@using ProcurementCopilot.Application.Abstractions
+@inject IProcurementAdminStore Store
+
+<PageTitle>Restricted parties</PageTitle>
+<h1>Restricted parties</h1>
+<p class="text-muted">Vendors on this list can never receive an award recommendation; <code>check_vendor_compliance</code> reports them as BLOCKED.</p>
+
+@if (error is not null) { <div class="alert alert-danger">@error</div> }
+
+<table class="table table-sm table-striped">
+    <thead><tr><th>Vendor</th><th>List</th><th>Listed on</th><th>Reason</th><th></th></tr></thead>
+    <tbody>
+    @foreach (var e in entries)
+    {
+        <tr><td>@e.VendorName (VND-@e.BusinessEntityId.ToString("0000"))</td><td>@e.ListName</td><td>@e.ListedOn.ToString("yyyy-MM-dd")</td><td>@e.Reason</td>
+            <td><button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveAsync(e)">Remove</button></td></tr>
+    }
+    </tbody>
+</table>
+
+<div class="card"><div class="card-body">
+    <h5>Add a vendor to the list</h5>
+    <EditForm Model="draft" OnValidSubmit="AddAsync">
+        <div class="row g-2">
+            <div class="col-md-4"><label class="form-label">Vendor</label>
+                <InputSelect class="form-select" @bind-Value="draft.BusinessEntityId">@foreach (var v in vendors) { <option value="@v.BusinessEntityId">@v.Name (@v.VendorId)</option> }</InputSelect></div>
+            <div class="col-md-4"><label class="form-label">List name</label><InputText class="form-control" @bind-Value="draft.ListName" /></div>
+            <div class="col-md-2"><label class="form-label">Listed on</label><InputDate class="form-control" @bind-Value="draft.ListedOn" /></div>
+            <div class="col-12"><label class="form-label">Reason</label><InputText class="form-control" @bind-Value="draft.Reason" /></div>
+        </div>
+        <button type="submit" class="btn btn-danger mt-3">Add to restricted list</button>
+    </EditForm>
+</div></div>
+
+@code {
+    private IReadOnlyList<AdminRestrictedParty> entries = [];
+    private IReadOnlyList<AdminVendor> vendors = [];
+    private AdminRestrictedParty draft = new();
+    private string? error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { vendors = await Store.ListVendorsAsync(); draft.BusinessEntityId = vendors.FirstOrDefault()?.BusinessEntityId ?? 0; await LoadAsync(); }
+        catch (Microsoft.Data.SqlClient.SqlException ex) { error = ex.Message; }
+    }
+
+    private async Task LoadAsync()
+    {
+        try { entries = await Store.ListRestrictedPartiesAsync(); error = null; }
+        catch (Microsoft.Data.SqlClient.SqlException ex) { error = ex.Message; }
+    }
+
+    private async Task AddAsync()
+    {
+        try { await Store.SaveRestrictedPartyAsync(draft); draft = new AdminRestrictedParty { BusinessEntityId = draft.BusinessEntityId }; await LoadAsync(); }
+        catch (Microsoft.Data.SqlClient.SqlException ex) { error = ex.Message; }
+    }
+
+    private async Task RemoveAsync(AdminRestrictedParty e)
+    {
+        try { await Store.DeleteRestrictedPartyAsync(e.BusinessEntityId); await LoadAsync(); }
+        catch (Microsoft.Data.SqlClient.SqlException ex) { error = ex.Message; }
+    }
+}

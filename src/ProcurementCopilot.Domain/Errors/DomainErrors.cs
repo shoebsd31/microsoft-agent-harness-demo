@@ -22,7 +22,7 @@ public static class DomainErrors
     public static class Money
     {
         /// <summary>Currency code is not a three-letter ISO-4217 code on the allowlist.</summary>
-        public static readonly Error InvalidCurrency = new("Currency.Invalid", "Currency must be a supported ISO-4217 code (EUR, USD, GBP, JPY, CHF, SEK).");
+        public static readonly Error InvalidCurrency = new("Currency.Invalid", "Currency must be a supported ISO-4217 code (EUR, USD, GBP, JPY, CHF, SEK, CAD, AUD, MXN).");
 
         /// <summary>Amount is negative or not finite.</summary>
         public static readonly Error InvalidAmount = new("Money.InvalidAmount", "Amount must be zero or positive.");

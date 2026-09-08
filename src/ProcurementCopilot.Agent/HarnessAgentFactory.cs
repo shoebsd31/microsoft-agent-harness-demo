@@ -34,13 +34,15 @@ public sealed class HarnessAgentFactory
     private readonly ISessionStore _sessions;
     private readonly IBidRepository _bids;
     private readonly PromptCatalog _prompts;
+    private readonly IDataProviderInfo? _dataProvider;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<HarnessAgentFactory> _logger;
 
     /// <summary>Initializes the factory.</summary>
     public HarnessAgentFactory(ProcurementToolset toolset, ConfinedShellTool shell, BackgroundAgentFactory backgroundAgents, ApprovalPolicy approvals,
-        WorkspacePathPolicy paths, ISessionStore sessions, IBidRepository bids, PromptCatalog prompts, ILoggerFactory? loggerFactory = null)
+        WorkspacePathPolicy paths, ISessionStore sessions, IBidRepository bids, PromptCatalog prompts, ILoggerFactory? loggerFactory = null, IDataProviderInfo? dataProvider = null)
     {
+        _dataProvider = dataProvider;
         _toolset = toolset;
         _shell = shell;
         _backgroundAgents = backgroundAgents;
@@ -69,6 +71,9 @@ public sealed class HarnessAgentFactory
     /// <summary>Builds the fully explicit <see cref="HarnessAgentOptions"/>. Public so tests can assert every switch.</summary>
     public HarnessAgentOptions BuildOptions(IChatClient chatClient, ProcurementAgentOptions options, IChatClient? judgeClient = null, IChatClient? backgroundChatClient = null)
     {
+        _prompts.Organisation = string.IsNullOrWhiteSpace(options.Agent.OrganisationName)
+            ? (_dataProvider?.Provider == Application.Configuration.DataOptions.SqlServer ? "Adventure Works Cycles" : "Contoso Industrial Systems")
+            : options.Agent.OrganisationName;
         bool webSearch = options.Agent.EnableWebSearch && WebSearchSupport.IsSupported(chatClient);
         if (options.Agent.EnableWebSearch && !webSearch)
         {
@@ -89,7 +94,7 @@ public sealed class HarnessAgentFactory
         return new HarnessAgentOptions
         {
             Name = "procurement-copilot",
-            Description = "Contoso Procurement Copilot: evaluates RFP bids, checks compliance and recommends a vendor.",
+            Description = _prompts.Organisation + " Procurement Copilot: evaluates RFP bids, checks compliance and recommends a vendor.",
             HarnessInstructions = HarnessAgent.DefaultInstructions + "\n\n" + _prompts.HarnessAddendum,
             ChatOptions = new ChatOptions
             {

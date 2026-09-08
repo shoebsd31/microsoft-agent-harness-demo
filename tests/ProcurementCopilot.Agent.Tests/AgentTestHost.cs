@@ -7,6 +7,7 @@ using ProcurementCopilot.Application.Abstractions;
 using ProcurementCopilot.Application.DependencyInjection;
 using ProcurementCopilot.Domain.Repositories;
 using ProcurementCopilot.Infrastructure.Data;
+using ProcurementCopilot.Infrastructure.Outbox;
 using ProcurementCopilot.Infrastructure.Repositories;
 using ProcurementCopilot.Testing.Fakes;
 
@@ -44,6 +45,9 @@ public sealed class AgentTestHost : IDisposable
         services.AddSingleton<IOutbox>(Outbox);
         services.AddSingleton<IAuditLog>(Audit);
         services.AddSingleton<IShellExecutor>(Shell);
+        services.AddSingleton<IAwardRecorder>(sp => new FileAwardRecorder(sp.GetRequiredService<IOutbox>()));
+        services.AddSingleton<IReadOnlyQueryExecutor>(Query);
+        services.AddSingleton<IDataProviderInfo>(new FakeDataProviderInfo("Json", "test seed"));
         Services = services.BuildServiceProvider();
     }
 
@@ -62,6 +66,8 @@ public sealed class AgentTestHost : IDisposable
     public FixedClock Clock { get; } = new(new DateTimeOffset(2026, 9, 7, 9, 0, 0, TimeSpan.Zero));
 
     public FakeShellExecutor Shell { get; } = new();
+
+    public FakeQueryExecutor Query { get; } = new();
 
     public HarnessAgentFactory Factory => Services.GetRequiredService<HarnessAgentFactory>();
 

@@ -8,15 +8,20 @@ namespace ProcurementCopilot.ConsoleApp.Ui;
 public static class Render
 {
     /// <summary>Prints the start-up banner with the demo scenario and the suggested first prompt.</summary>
-    public static void Banner(bool fakeMode, Guid sessionId)
+    public static void Banner(bool fakeMode, Guid sessionId, string dataProvider, string dataDescription)
     {
+        bool sql = string.Equals(dataProvider, "SqlServer", StringComparison.Ordinal);
         AnsiConsole.Write(new FigletText("Procurement Copilot").Color(Color.Teal));
         var panel = new Panel(new Markup(
-            "[bold]Contoso Industrial Systems[/] - harness demo on Microsoft Agent Framework\n" +
-            "Scenario: evaluate [teal]RFP-2026-017[/] (40 CNC vertical machining centres, EUR) with 5 vendor bids: one sanctioned vendor, one missing ISO 14001, one USD bid, one ambiguous delivery clause.\n\n" +
+            (sql ? "[bold]Adventure Works Cycles[/]" : "[bold]Contoso Industrial Systems[/]") + " - harness demo on Microsoft Agent Framework\n" +
+            (sql
+                ? "Scenario: evaluate [teal]RFP-2026-017[/] (2,000 HL Mountain Tires, USD) with 5 real AdventureWorks vendors: one restricted party, one missing ISO 14001, one EUR bid, one ambiguous delivery clause.\n"
+                : "Scenario: evaluate [teal]RFP-2026-017[/] (40 CNC vertical machining centres, EUR) with 5 vendor bids: one sanctioned vendor, one missing ISO 14001, one USD bid, one ambiguous delivery clause.\n") +
+            $"Data: [grey]{Markup.Escape(dataDescription)}[/]\n\n" +
             "Suggested first prompt: [green]\"Evaluate RFP-2026-017 and recommend a vendor.\"[/]\n" +
             (fakeMode ? "[yellow]FAKE MODE[/]: replaying a canned run with the scripted client (no model calls). After the plan, type [green]/mode execute[/] then [green]go[/].\n" : string.Empty) +
-            $"Session [grey]{sessionId:N}[/]. Type [green]/help[/] for commands. Ctrl+C cancels the current run; Ctrl+C again exits."))
+            $"Session [grey]{sessionId:N}[/]. Type [green]/help[/] for commands. Ctrl+C cancels the current run; Ctrl+C again exits.\n" +
+            $"Watch this session from a second terminal: [green]--attach {sessionId:N}[/] (read-only; [green]/takeover[/] to drive it)."))
         {
             Border = BoxBorder.Rounded,
             Header = new PanelHeader(" Welcome "),
@@ -24,9 +29,9 @@ public static class Render
         AnsiConsole.Write(panel);
     }
 
-    /// <summary>Prints the prompt with the mode badge.</summary>
-    public static void Prompt(string mode) =>
-        AnsiConsole.Markup($"[{ModeColor(mode)} bold] {mode.ToUpperInvariant()} [/] [teal]>[/] ");
+    /// <summary>Prints the prompt with the mode badge (and an observer badge when this instance does not drive the session).</summary>
+    public static void Prompt(string mode, bool observer = false) =>
+        AnsiConsole.Markup((observer ? "[white on grey] OBSERVER [/]" : string.Empty) + $"[{ModeColor(mode)} bold] {mode.ToUpperInvariant()} [/] [teal]>[/] ");
 
     /// <summary>Returns the colour used for a mode badge.</summary>
     public static string ModeColor(string mode) => string.Equals(mode, AgentModes.Execute, StringComparison.OrdinalIgnoreCase) ? "black on green" : "black on aqua";

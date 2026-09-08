@@ -8,7 +8,7 @@ public sealed record CurrencyCode
 {
     /// <summary>Currencies accepted by every tool and value object.</summary>
     public static readonly IReadOnlySet<string> Allowed =
-        new HashSet<string>(StringComparer.Ordinal) { "EUR", "USD", "GBP", "JPY", "CHF", "SEK" };
+        new HashSet<string>(StringComparer.Ordinal) { "EUR", "USD", "GBP", "JPY", "CHF", "SEK", "CAD", "AUD", "MXN" };
 
     /// <summary>The euro.</summary>
     public static readonly CurrencyCode Eur = new("EUR");

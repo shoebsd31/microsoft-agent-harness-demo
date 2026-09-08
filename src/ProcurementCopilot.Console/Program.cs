@@ -12,7 +12,8 @@ using ProcurementCopilot.Infrastructure.Logging;
 using Serilog;
 
 // Entry point. Flags: --self-check (validate DI + config without calling a model), --fake (offline scripted demo),
-// --session <id> (resume a stored session).
+// --session <id> (resume and drive a stored session), --attach <id> (observe a session another instance drives),
+// --tui / --classic (force the full-screen or the line-oriented front-end; default: TUI on a real terminal).
 var launch = LaunchOptions.Parse(args);
 string logsDirectory = Path.Combine(AppContext.BaseDirectory, "logs");
 
@@ -20,6 +21,11 @@ HostApplicationBuilder builder = Host.CreateApplicationBuilder(new HostApplicati
 builder.Configuration.AddJsonFile("appsettings.json", optional: false, reloadOnChange: false);
 builder.Configuration.AddUserSecrets<Program>(optional: true);
 builder.Configuration.AddEnvironmentVariables();
+if (launch.Fake)
+{
+    // Fake mode is fully offline: the scripted model replays the JSON scenario, so never touch a database.
+    builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { ["Data:Provider"] = ProcurementCopilot.Application.Configuration.DataOptions.Json });
+}
 
 var redactor = new SecretRedactor(builder.Configuration[$"{FoundryOptions.SectionName}:{nameof(FoundryOptions.ApiKey)}"]);
 builder.Services.AddSerilog((_, configuration) => SerilogSetup.Configure(configuration, builder.Configuration, redactor, logsDirectory));
@@ -39,7 +45,9 @@ try
         return await SelfCheck.RunAsync(host.Services).ConfigureAwait(false);
     }
 
-    return await host.Services.GetRequiredService<InteractiveConsole>().RunAsync().ConfigureAwait(false);
+    return launch.UseTui
+        ? await host.Services.GetRequiredService<ProcurementCopilot.ConsoleApp.Tui.TuiShell>().RunAsync().ConfigureAwait(false)
+        : await host.Services.GetRequiredService<InteractiveConsole>().RunAsync().ConfigureAwait(false);
 }
 catch (Exception ex) when (ex is Microsoft.Extensions.Options.OptionsValidationException or InvalidOperationException or AggregateException)
 {

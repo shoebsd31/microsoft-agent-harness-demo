@@ -16,6 +16,8 @@ public static class OptionsRegistration
         services.AddOptions<SecurityOptions>().Bind(configuration.GetSection(SecurityOptions.SectionName)).ValidateDataAnnotations().ValidateOnStart();
         services.AddOptions<SessionsOptions>().Bind(configuration.GetSection(SessionsOptions.SectionName)).ValidateOnStart();
         services.AddOptions<TelemetryOptions>().Bind(configuration.GetSection(TelemetryOptions.SectionName)).ValidateOnStart();
+        services.AddOptions<DataOptions>().Bind(configuration.GetSection(DataOptions.SectionName)).ValidateDataAnnotations().ValidateOnStart();
+        services.AddOptions<SqlServerOptions>().Bind(configuration.GetSection(SqlServerOptions.SectionName)).ValidateDataAnnotations().ValidateOnStart();
         return services;
     }
 }

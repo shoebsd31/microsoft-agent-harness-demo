@@ -35,6 +35,7 @@ public static class TelemetryServiceExtensions
             .WithTracing(tracing =>
             {
                 tracing.AddSource(ApplicationSourceName).AddSource(AgentFrameworkSourceName).AddSource("Microsoft.Extensions.AI");
+                tracing.AddSqlClientInstrumentation();
                 tracing.AddProcessor(new RedactingProcessor(redactor));
                 tracing.AddProcessor(new SpanRingBufferProcessor(buffer));
                 if (options.UseOtlp)

@@ -9,7 +9,10 @@ using Spectre.Console;
 
 namespace ProcurementCopilot.ConsoleApp.Ui;
 
-/// <summary>Interactive tool approval: shows the tool and pretty-printed arguments, offers once / always / deny, audits the decision.</summary>
+/// <summary>
+/// Tool approval: the classic prompt shows the tool and pretty-printed arguments and reads y/a/n; the TUI asks through a
+/// dialog. Both funnel the choice through <see cref="ResolveAsync"/>, which builds the response and audits the decision.
+/// </summary>
 public sealed class ApprovalPrompt
 {
     private static readonly JsonSerializerOptions PrettyJson = new() { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
@@ -23,14 +26,19 @@ public sealed class ApprovalPrompt
         _clock = clock;
     }
 
-    /// <summary>Asks the analyst and returns the response content to send back to the agent.</summary>
+    /// <summary>Tool name of a request.</summary>
+    public static string ToolName(ToolApprovalRequestContent request) =>
+        (request.ToolCall as FunctionCallContent)?.Name ?? request.ToolCall?.ToString() ?? "unknown";
+
+    /// <summary>Pretty-printed arguments of a request.</summary>
+    public static string Arguments(ToolApprovalRequestContent request) =>
+        (request.ToolCall as FunctionCallContent)?.Arguments is { } arguments ? JsonSerializer.Serialize(arguments, PrettyJson) : "{}";
+
+    /// <summary>Classic UI: asks the analyst on the console and returns the response content to send back to the agent.</summary>
     public async Task<AIContent> AskAsync(ToolApprovalRequestContent request, AppState state)
     {
-        var call = request.ToolCall as FunctionCallContent;
-        string name = call?.Name ?? request.ToolCall?.ToString() ?? "unknown";
-        string arguments = call?.Arguments is null ? "{}" : JsonSerializer.Serialize(call.Arguments, PrettyJson);
-
-        AnsiConsole.Write(new Panel(new Markup($"[bold yellow]{Markup.Escape(name)}[/]\n[grey]{Markup.Escape(Render.Truncate(arguments, 1200))}[/]"))
+        string name = ToolName(request);
+        AnsiConsole.Write(new Panel(new Markup($"[bold yellow]{Markup.Escape(name)}[/]\n[grey]{Markup.Escape(Render.Truncate(Arguments(request), 1200))}[/]"))
         {
             Header = new PanelHeader(" 🔐 Approval required "),
             Border = BoxBorder.Double,
@@ -38,7 +46,15 @@ public sealed class ApprovalPrompt
         });
 
         string choice = Choose();
-        string decision = choice switch { "a" => "approve-always", "y" => "approve-once", _ => "deny" };
+        AIContent response = await ResolveAsync(request, state, choice).ConfigureAwait(false);
+        AnsiConsole.MarkupLine(choice == "n" ? "[red]  ✖ denied[/]" : $"[green]  ✔ {Describe(choice)}[/]");
+        return response;
+    }
+
+    /// <summary>Applies a choice (<c>y</c> once, <c>a</c> always this session, anything else deny): records the standing approval, audits, builds the response.</summary>
+    public async Task<AIContent> ResolveAsync(ToolApprovalRequestContent request, AppState state, string choice)
+    {
+        string name = ToolName(request);
         AIContent response = choice switch
         {
             "a" => request.CreateAlwaysApproveToolResponse("Analyst granted a standing approval for this tool in this session"),
@@ -51,11 +67,13 @@ public sealed class ApprovalPrompt
             state.StandingApprovals.Add(name);
         }
 
-        string hash = ArgumentHasher.Hash(name, arguments);
-        await _audit.RecordApprovalAsync(new ApprovalRecord(_clock.UtcNow, Environment.UserName, name, hash, decision, SessionIdentity.GetOrCreate(state.Session))).ConfigureAwait(false);
-        AnsiConsole.MarkupLine(decision == "deny" ? "[red]  ✖ denied[/]" : $"[green]  ✔ {decision}[/]");
+        string hash = ArgumentHasher.Hash(name, Arguments(request));
+        await _audit.RecordApprovalAsync(new ApprovalRecord(_clock.UtcNow, Environment.UserName, name, hash, Describe(choice), SessionIdentity.GetOrCreate(state.Session))).ConfigureAwait(false);
         return response;
     }
+
+    /// <summary>Audit label for a choice.</summary>
+    public static string Describe(string choice) => choice switch { "a" => "approve-always", "y" => "approve-once", _ => "deny" };
 
     private static string Choose()
     {

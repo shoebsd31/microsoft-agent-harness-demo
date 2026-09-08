@@ -2,119 +2,122 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using ProcurementCopilot.ConsoleApp.Ui;
-using Spectre.Console;
 
 namespace ProcurementCopilot.ConsoleApp.Runtime;
 
-/// <summary>Streams one agent turn: renders text tokens, collapsed tool calls, loop feedback and approval prompts.</summary>
+/// <summary>Streams one agent turn to an <see cref="ITurnPresenter"/>, handles approvals, and publishes live status.</summary>
 public sealed class AgentTurnRunner
 {
-    private readonly ApprovalPrompt _approvals;
+    private readonly StatusPublisher _status;
     private readonly ILogger<AgentTurnRunner> _logger;
 
     /// <summary>Initializes the runner.</summary>
-    public AgentTurnRunner(ApprovalPrompt approvals, ILogger<AgentTurnRunner> logger)
+    public AgentTurnRunner(StatusPublisher status, ILogger<AgentTurnRunner> logger)
     {
-        _approvals = approvals;
+        _status = status;
         _logger = logger;
     }
 
     /// <summary>Runs the agent on the user's input, handling approvals until the turn completes or is cancelled.</summary>
-    public async Task RunTurnAsync(AppState state, string userInput, CancellationToken cancellationToken)
+    public async Task RunTurnAsync(AppState state, ITurnPresenter presenter, string userInput, CancellationToken cancellationToken)
     {
+        _status.Update(s => { s.Activity = "running"; s.LastPrompt = Render.Truncate(userInput, 200); s.CurrentTool = null; });
         IList<ChatMessage> next = [new ChatMessage(ChatRole.User, userInput)];
-        while (next.Count > 0 && !cancellationToken.IsCancellationRequested)
+        try
         {
-            List<ToolApprovalRequestContent> requests = await StreamAsync(state, next, cancellationToken).ConfigureAwait(false);
-            next = [];
-            foreach (ToolApprovalRequestContent request in requests)
+            while (next.Count > 0 && !cancellationToken.IsCancellationRequested)
             {
-                AIContent response = await _approvals.AskAsync(request, state).ConfigureAwait(false);
-                next.Add(new ChatMessage(ChatRole.User, [response]));
+                List<ToolApprovalRequestContent> requests = await StreamAsync(state, presenter, next, cancellationToken).ConfigureAwait(false);
+                next = [];
+                foreach (ToolApprovalRequestContent request in requests)
+                {
+                    string tool = (request.ToolCall as FunctionCallContent)?.Name ?? "tool";
+                    _status.Update(s => { s.Activity = "awaiting-approval"; s.CurrentTool = tool; });
+                    AIContent response = await presenter.ApproveAsync(request, state).ConfigureAwait(false);
+                    _status.Update(s => { s.Activity = "running"; s.CurrentTool = null; });
+                    next.Add(new ChatMessage(ChatRole.User, [response]));
+                }
             }
+        }
+        finally
+        {
+            _status.Update(s => { s.Activity = "idle"; s.CurrentTool = null; s.Usage = new UsageSnapshot(state.Usage.LastInputTokens, state.Usage.LastOutputTokens, state.Usage.TotalTokens, state.Usage.Reports); });
         }
     }
 
-    private async Task<List<ToolApprovalRequestContent>> StreamAsync(AppState state, IList<ChatMessage> messages, CancellationToken cancellationToken)
+    private async Task<List<ToolApprovalRequestContent>> StreamAsync(AppState state, ITurnPresenter presenter, IList<ChatMessage> messages, CancellationToken cancellationToken)
     {
-        var pendingCalls = new Dictionary<string, FunctionCallContent>(StringComparer.Ordinal);
+        var pending = new Dictionary<string, FunctionCallContent>(StringComparer.Ordinal);
         var requests = new List<ToolApprovalRequestContent>();
-        bool textOpen = false;
         try
         {
             await foreach (AgentResponseUpdate update in state.Agent.RunStreamingAsync(messages, state.Session, cancellationToken: cancellationToken).ConfigureAwait(false))
             {
                 foreach (AIContent content in update.Contents)
                 {
-                    textOpen = Handle(state, update, content, pendingCalls, requests, textOpen);
+                    Handle(state, presenter, update, content, pending, requests);
                 }
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            Render.Warn("\nRun cancelled.");
+            presenter.EndText();
+            presenter.Cancelled();
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             _logger.LogError(ex, "Agent turn failed");
-            Render.Error("The agent run failed: " + ex.GetType().Name + ". Details are in the log file under logs/.");
+            presenter.EndText();
+            presenter.Error("The agent run failed: " + ex.GetType().Name + ". Details are in the log file under logs/.");
         }
 
-        if (textOpen)
-        {
-            AnsiConsole.WriteLine();
-        }
-
+        presenter.EndText();
         return requests;
     }
 
-    private static bool Handle(AppState state, AgentResponseUpdate update, AIContent content, Dictionary<string, FunctionCallContent> pending, List<ToolApprovalRequestContent> requests, bool textOpen)
+    private void Handle(AppState state, ITurnPresenter presenter, AgentResponseUpdate update, AIContent content, Dictionary<string, FunctionCallContent> pending, List<ToolApprovalRequestContent> requests)
     {
         switch (content)
         {
             case TextContent text when update.Role == ChatRole.User:
-                CloseText(ref textOpen);
-                Render.LoopFeedback(text.Text);
-                return false;
+                presenter.EndText();
+                presenter.LoopFeedback(text.Text);
+                break;
             case TextContent text when !string.IsNullOrEmpty(text.Text):
-                AnsiConsole.Write(text.Text);
-                return true;
+                presenter.Text(text.Text);
+                break;
             case FunctionCallContent call:
-                CloseText(ref textOpen);
+                presenter.EndText();
                 pending[call.CallId] = call;
                 state.Tasks.OnCall(call);
-                return false;
+                presenter.ToolStarted(call.Name);
+                _status.Update(s => s.CurrentTool = call.Name);
+                break;
             case FunctionResultContent result:
-                CloseText(ref textOpen);
+                presenter.EndText();
                 state.Tasks.OnResult(result);
                 if (pending.Remove(result.CallId, out FunctionCallContent? completed))
                 {
-                    Render.ToolCall(completed.Name, ToolResultSummarizer.Arguments(completed), ToolResultSummarizer.Result(result.Result));
+                    string arguments = ToolResultSummarizer.Arguments(completed);
+                    string summary = ToolResultSummarizer.Result(result.Result);
+                    presenter.ToolCall(completed.Name, arguments, summary);
+                    _status.Update(s => { s.CurrentTool = null; s.RecentTools.Add(new ToolEvent(DateTimeOffset.UtcNow, completed.Name, arguments, summary)); s.Tasks = state.Tasks.Tasks.Values.ToList(); });
                 }
 
-                return false;
+                break;
             case ToolApprovalRequestContent request:
-                CloseText(ref textOpen);
+                presenter.EndText();
                 requests.Add(request);
-                return false;
+                break;
             case UsageContent usage:
                 state.Usage.Record(usage.Details);
-                return textOpen;
+                break;
             case ErrorContent error:
-                CloseText(ref textOpen);
-                Render.Error(error.Message ?? "unknown error");
-                return false;
+                presenter.EndText();
+                presenter.Error(error.Message ?? "unknown error");
+                break;
             default:
-                return textOpen;
-        }
-    }
-
-    private static void CloseText(ref bool textOpen)
-    {
-        if (textOpen)
-        {
-            AnsiConsole.WriteLine();
-            textOpen = false;
+                break;
         }
     }
 }

@@ -1,0 +1,37 @@
+@page "/awards"
+@rendermode InteractiveServer
+@using ProcurementCopilot.Application.Abstractions
+@inject IProcurementAdminStore Store
+
+<PageTitle>Awards</PageTitle>
+<h1>Award recommendations</h1>
+<p class="text-muted">Written by the copilot's <code>record_award_recommendation</code> tool (after analyst approval) through <code>copilot.usp_RecordAwardRecommendation</code>, which also creates a <em>Pending</em> purchase order in <code>Purchasing.PurchaseOrderHeader</code>.</p>
+
+@if (error is not null) { <div class="alert alert-danger">@error</div> }
+
+<table class="table table-sm table-striped">
+    <thead><tr><th>#</th><th>RFP</th><th>Vendor</th><th>Score</th><th>Purchase order</th><th>Total due</th><th>Recorded</th><th>By</th><th>Rationale</th></tr></thead>
+    <tbody>
+    @foreach (var a in awards)
+    {
+        <tr>
+            <td>@a.AwardRecommendationId</td><td>@a.RfpId</td><td>@a.VendorName (@a.VendorId)</td><td>@a.WinningScore</td>
+            <td>@(a.PurchaseOrderId is null ? "—" : $"PO {a.PurchaseOrderId} ({a.PurchaseOrderStatus})")</td>
+            <td>@a.TotalDue?.ToString("N2")</td><td>@a.RecordedAt.ToString("yyyy-MM-dd HH:mm")</td><td>@a.RecordedBy</td>
+            <td><small>@a.Rationale</small></td>
+        </tr>
+    }
+    </tbody>
+</table>
+@if (awards.Count == 0) { <p>No award recommendations yet. Run the console demo through to the award step.</p> }
+
+@code {
+    private IReadOnlyList<AdminAward> awards = [];
+    private string? error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { awards = await Store.ListAwardsAsync(); }
+        catch (Microsoft.Data.SqlClient.SqlException ex) { error = ex.Message; }
+    }
+}

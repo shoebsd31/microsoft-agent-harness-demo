@@ -25,6 +25,7 @@ namespace ProcurementCopilot.Application.Models;
 [JsonSerializable(typeof(ClarificationDraftReport))]
 [JsonSerializable(typeof(AwardRecommendationReport))]
 [JsonSerializable(typeof(EvaluationProgress))]
+[JsonSerializable(typeof(QueryToolResult))]
 [JsonSerializable(typeof(EvaluationState))]
 [JsonSerializable(typeof(EmailDraft))]
 [JsonSerializable(typeof(ApprovalRecord))]
