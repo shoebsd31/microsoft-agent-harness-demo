@@ -21,7 +21,7 @@ public sealed class SecurityOptions
 public sealed class ApprovalPolicyOptions
 {
     /// <summary>Defaults used when configuration does not list any tool.</summary>
-    public static readonly IReadOnlyList<string> Defaults = ["draft_clarification_email", "record_award_recommendation", "shell"];
+    public static readonly IReadOnlyList<string> Defaults = ["draft_clarification_email", "record_award_recommendation", "shell", "query_readonly"];
 
     /// <summary>Tool names that always require approval and can never be auto-approved. Bound from configuration.</summary>
     public IReadOnlyList<string> RequireApprovalFor { get; set; } = [];

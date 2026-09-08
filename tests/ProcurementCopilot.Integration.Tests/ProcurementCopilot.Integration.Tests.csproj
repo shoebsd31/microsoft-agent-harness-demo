@@ -11,6 +11,8 @@
     <PackageReference Include="Microsoft.Extensions.Configuration" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="$(RepoRoot)data\*" Link="data\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />

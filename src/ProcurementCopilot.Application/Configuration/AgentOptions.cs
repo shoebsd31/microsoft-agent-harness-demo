@@ -33,6 +33,9 @@ public sealed class AgentOptions
     /// <summary>Add the AI judge loop evaluator (sends conversation content to a second model call).</summary>
     public bool EnableJudge { get; set; }
 
+    /// <summary>Organisation named in the prompts. Empty = derived from the data backend (Adventure Works Cycles for SQL Server, Contoso Industrial Systems for JSON).</summary>
+    public string OrganisationName { get; set; } = string.Empty;
+
     /// <summary>Background (child) agent limits.</summary>
     [Required]
     public BackgroundAgentsOptions BackgroundAgents { get; set; } = new();

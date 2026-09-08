@@ -14,16 +14,20 @@ public sealed class ProcurementToolset
     private readonly Dictionary<string, AIFunction> _raw;
     private readonly ApprovalPolicy _approvals;
     private readonly IAgentModeAccessor _modes;
+    private readonly QueryReadOnlyTool _query;
+    private readonly IReadOnlyQueryExecutor _executor;
 
     /// <summary>Initializes the toolset from the individual tool classes.</summary>
     public ProcurementToolset(
         ListOpenRfpsTool listOpenRfps, GetRfpTool getRfp, ListBidsTool listBids, GetVendorProfileTool getVendorProfile,
         ConvertCurrencyTool convertCurrency, ScoreBidTool scoreBid, CheckVendorComplianceTool checkCompliance,
-        DraftClarificationEmailTool draftEmail, RecordAwardRecommendationTool recordAward,
-        ApprovalPolicy approvals, IAgentModeAccessor modes)
+        DraftClarificationEmailTool draftEmail, RecordAwardRecommendationTool recordAward, QueryReadOnlyTool query,
+        ApprovalPolicy approvals, IAgentModeAccessor modes, IReadOnlyQueryExecutor executor)
     {
         _approvals = approvals;
         _modes = modes;
+        _query = query;
+        _executor = executor;
         _raw = new AIFunction[]
         {
             listOpenRfps.Create(), getRfp.Create(), listBids.Create(), getVendorProfile.Create(), convertCurrency.Create(),
@@ -49,8 +53,11 @@ public sealed class ProcurementToolset
     public IReadOnlyList<AIFunction> SideEffectingTools =>
         _raw.Values.Where(f => ToolNames.SideEffecting.Contains(f.Name)).Select(Wrap).ToList();
 
+    /// <summary>The approval-gated <c>query_readonly</c> tool, present only when a database backend is active.</summary>
+    public IReadOnlyList<AIFunction> QueryTools => _executor.IsAvailable ? [Wrap(_query.Create())] : [];
+
     /// <summary>Every tool for the main agent, wrapped according to policy.</summary>
-    public IReadOnlyList<AITool> AllTools => [.. ReadOnlyTools, .. SideEffectingTools];
+    public IReadOnlyList<AITool> AllTools => [.. ReadOnlyTools, .. SideEffectingTools, .. QueryTools];
 
     /// <summary>Applies policy wrapping to any function (used for the shell tool too).</summary>
     public AIFunction Wrap(AIFunction function)

@@ -53,7 +53,7 @@ public sealed class TodosCommand : IConsoleCommand
 }
 
 /// <summary><c>/mode [plan|execute]</c>.</summary>
-public sealed class ModeCommand : IConsoleCommand
+public sealed class ModeCommand(SessionCoordinator coordinator) : IConsoleCommand
 {
     /// <inheritdoc />
     public string Name => "/mode";
@@ -84,7 +84,14 @@ public sealed class ModeCommand : IConsoleCommand
             return;
         }
 
+        if (state.Role == SessionRole.Observer)
+        {
+            Render.Warn("Observers cannot change the mode; /takeover first.");
+            return;
+        }
+
         await modes.SetModeAsync(state.Session, requested).ConfigureAwait(false);
+        coordinator.PublishMode(requested);
         AnsiConsole.MarkupLine($"Switched to [{Render.ModeColor(requested)}] {requested.ToUpperInvariant()} [/] mode.");
     }
 }

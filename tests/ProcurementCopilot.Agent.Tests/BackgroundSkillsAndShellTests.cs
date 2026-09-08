@@ -102,7 +102,7 @@ public class SkillsDiscoveryTests
 
         IList<AgentSkill> skills = await source.GetSkillsAsync(new AgentSkillsSourceContext(agent, session));
 
-        skills.Select(s => s.Frontmatter.Name).Order().ShouldBe(["award-memo", "compliance-check", "rfp-scoring"]);
+        skills.Select(s => s.Frontmatter.Name).Order().ShouldBe(["award-memo", "compliance-check", "database-schema", "rfp-scoring"]);
     }
 
     [Fact]

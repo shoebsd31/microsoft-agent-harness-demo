@@ -1,0 +1,95 @@
+@page "/"
+@rendermode InteractiveServer
+@using ProcurementCopilot.Application.Abstractions
+@using ProcurementCopilot.Infrastructure.SqlServer
+@inject DataProviderSelection Data
+@inject SqlMigrationRunner Migrations
+@inject IProcurementAdminStore Store
+
+<PageTitle>Procurement Admin</PageTitle>
+
+<h1>Procurement Copilot Admin</h1>
+<p class="text-muted">Edits the <code>Procurement</code> schema that the copilot reads through the <code>copilot</code> views. AdventureWorks base tables are never modified here.</p>
+
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="card"><div class="card-body">
+            <h5 class="card-title">Database</h5>
+            <p class="mb-1"><strong>@Data.Provider</strong> &mdash; @Data.Description</p>
+            @if (Data.Warning is not null) { <p class="text-warning">@Data.Warning</p> }
+            @if (status is null)
+            {
+                <p>Loading migration status…</p>
+            }
+            else
+            {
+                <p class="mb-1">Scripts: <code>@status.Directory</code></p>
+                <p class="mb-1">Applied (@status.Applied.Count): @string.Join(", ", status.Applied)</p>
+                <p class="mb-2">Pending (@status.Pending.Count): @(status.Pending.Count == 0 ? "none" : string.Join(", ", status.Pending))</p>
+                <button class="btn btn-primary btn-sm" disabled="@(status.Pending.Count == 0 || busy)" @onclick="ApplyAsync">Apply pending migrations</button>
+                @if (message is not null) { <span class="ms-2 text-success">@message</span> }
+                @if (error is not null) { <span class="ms-2 text-danger">@error</span> }
+            }
+        </div></div>
+    </div>
+    <div class="col-md-6">
+        <div class="card"><div class="card-body">
+            <h5 class="card-title">Contents</h5>
+            @if (counts is null) { <p>Loading…</p> } else {
+                <ul class="mb-0">
+                    <li><a href="rfps">RFPs</a>: @counts.Value.Rfps</li>
+                    <li><a href="bids">Bids</a>: @counts.Value.Bids</li>
+                    <li><a href="vendors">Vendors with a copilot profile</a>: @counts.Value.Profiles of @counts.Value.Vendors</li>
+                    <li><a href="restricted">Restricted parties</a>: @counts.Value.Restricted</li>
+                    <li><a href="awards">Award recommendations</a>: @counts.Value.Awards</li>
+                </ul>
+            }
+        </div></div>
+    </div>
+</div>
+
+@code {
+    private MigrationStatus? status;
+    private (int Rfps, int Bids, int Vendors, int Profiles, int Restricted, int Awards)? counts;
+    private bool busy;
+    private string? message;
+    private string? error;
+
+    protected override async Task OnInitializedAsync() => await RefreshAsync();
+
+    private async Task RefreshAsync()
+    {
+        try
+        {
+            status = await Migrations.GetStatusAsync();
+            var vendors = await Store.ListVendorsAsync();
+            counts = ((await Store.ListRfpsAsync()).Count, (await Store.ListBidsAsync(null)).Count, vendors.Count,
+                vendors.Count(v => v.YearsTrading is not null || v.Notes is not null || v.Certifications.Length > 0),
+                (await Store.ListRestrictedPartiesAsync()).Count, (await Store.ListAwardsAsync()).Count);
+        }
+        catch (Exception ex) when (ex is Microsoft.Data.SqlClient.SqlException or InvalidOperationException)
+        {
+            error = ex.Message;
+        }
+    }
+
+    private async Task ApplyAsync()
+    {
+        busy = true;
+        error = null;
+        try
+        {
+            var applied = await Migrations.ApplyPendingAsync();
+            message = applied.Count == 0 ? "Nothing to apply." : "Applied " + string.Join(", ", applied);
+            await RefreshAsync();
+        }
+        catch (Exception ex) when (ex is Microsoft.Data.SqlClient.SqlException or IOException)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

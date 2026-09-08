@@ -6,10 +6,15 @@
 #
 #   -Sessions   also delete the persisted sessions (%LOCALAPPDATA%\ProcurementCopilot\sessions or Sessions:Directory)
 #   -All        -Sessions plus the TestResults folders
+#   -Database   also remove the purchase orders and award recommendations the copilot wrote to SQL Server
+#               (runs database/maintenance/reset-demo-awards.sql with sqlcmd; server and database from -Server/-Database)
 #   -WhatIf     show what would be deleted without deleting
 param(
     [switch]$Sessions,
     [switch]$All,
+    [switch]$Database,
+    [string]$Server = 'localhost\SQLEXPRESS',
+    [string]$DatabaseName = 'AdventureWorks2019',
     [switch]$WhatIf
 )
 $ErrorActionPreference = 'Stop'
@@ -44,6 +49,11 @@ foreach ($path in $targets) {
         Remove-Item -LiteralPath $path -Recurse -Force -Confirm:$false
         Write-Host "Deleted $path" -ForegroundColor Cyan
     }
+}
+if ($Database) {
+    $script = Join-Path $root 'database' 'maintenance' 'reset-demo-awards.sql'
+    if ($WhatIf) { Write-Host "Would run $script against $Server/$DatabaseName" -ForegroundColor Yellow }
+    else { sqlcmd -S $Server -E -d $DatabaseName -C -b -i $script; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } }
 }
 if (-not $WhatIf) {
     Write-Host "Reset complete. Run 'dotnet build' (or 'dotnet run') to recreate the read-only workspace inputs." -ForegroundColor Green

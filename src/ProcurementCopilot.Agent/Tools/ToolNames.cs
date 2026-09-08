@@ -33,6 +33,9 @@ public static class ToolNames
     /// <summary>Confined shell (side effect: process execution).</summary>
     public const string Shell = "shell";
 
+    /// <summary>Approval-gated read-only SQL over the copilot schema (SQL Server backend only).</summary>
+    public const string QueryReadOnly = "query_readonly";
+
     /// <summary>Tools with side effects that the mode guard blocks in plan mode.</summary>
     public static readonly IReadOnlySet<string> SideEffecting =
         new HashSet<string>(StringComparer.Ordinal) { DraftClarificationEmail, RecordAwardRecommendation };

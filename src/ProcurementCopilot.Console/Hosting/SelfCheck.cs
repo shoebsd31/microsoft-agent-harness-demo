@@ -6,6 +6,7 @@ using ProcurementCopilot.Agent;
 using ProcurementCopilot.Application.Configuration;
 using ProcurementCopilot.Application.Security;
 using ProcurementCopilot.Domain.Repositories;
+using ProcurementCopilot.Infrastructure.SqlServer;
 using ProcurementCopilot.Testing;
 using Spectre.Console;
 
@@ -23,6 +24,14 @@ public static class SelfCheck
             FoundryOptions foundry = services.GetRequiredService<IOptions<FoundryOptions>>().Value;
             table.AddRow("Configuration bound and validated", "[green]ok[/]");
             table.AddRow("Foundry credentials", foundry.IsConfigured ? "[green]configured[/]" : "[yellow]not configured[/] (missing: " + Markup.Escape(string.Join(", ", foundry.MissingKeys())) + ") - live mode unavailable, --fake works");
+
+            DataProviderSelection data = services.GetRequiredService<DataProviderSelection>();
+            table.AddRow("Data backend", Markup.Escape(data.Provider + ": " + data.Description) + (data.Warning is null ? string.Empty : " [yellow](" + Markup.Escape(data.Warning) + ")[/]"));
+            if (data.IsSqlServer)
+            {
+                MigrationStatus migrations = await services.GetRequiredService<SqlMigrationRunner>().GetStatusAsync().ConfigureAwait(false);
+                table.AddRow("Database migrations", migrations.IsUpToDate ? $"[green]{migrations.Applied.Count} applied, up to date[/]" : $"[yellow]{migrations.Pending.Count} pending[/] (run scripts/apply-migrations)");
+            }
 
             int rfps = (await services.GetRequiredService<IRfpRepository>().GetAllAsync().ConfigureAwait(false)).Count;
             int vendors = (await services.GetRequiredService<IVendorRepository>().GetAllAsync().ConfigureAwait(false)).Count;

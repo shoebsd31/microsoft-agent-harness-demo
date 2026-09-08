@@ -31,6 +31,8 @@ public static class AgentServiceExtensions
         services.AddSingleton<CheckVendorComplianceTool>();
         services.AddSingleton<DraftClarificationEmailTool>();
         services.AddSingleton<RecordAwardRecommendationTool>();
+        services.AddSingleton<QueryReadOnlyTool>();
+        services.AddSingleton<Application.Security.SqlQueryPolicy>();
         services.AddSingleton<ProcurementToolset>();
 
         services.AddSingleton<IShellExecutor>(sp => new LocalShellRunner(

@@ -1,134 +1,116 @@
-using Microsoft.Extensions.Logging;
 using ProcurementCopilot.Agent.Sessions;
-using ProcurementCopilot.Agent.State;
-using ProcurementCopilot.Application.Abstractions;
-using ProcurementCopilot.ConsoleApp.Commands;
 using ProcurementCopilot.ConsoleApp.Hosting;
 using ProcurementCopilot.ConsoleApp.Ui;
+using ProcurementCopilot.Infrastructure.SqlServer;
 
 namespace ProcurementCopilot.ConsoleApp.Runtime;
 
-/// <summary>The interactive loop: banner, prompt, commands, agent turns, todo panel, cancellation and clean exit.</summary>
+/// <summary>The classic line-oriented loop: banner, prompt, commands, agent turns, observer feed, Ctrl+C handling and clean exit.</summary>
 public sealed class InteractiveConsole
 {
     private readonly AppState _state;
-    private readonly AgentBootstrapper _bootstrapper;
-    private readonly AgentTurnRunner _runner;
-    private readonly CommandDispatcher _commands;
-    private readonly ISessionStore _sessions;
+    private readonly SessionDriver _driver;
+    private readonly ClassicPresenter _presenter;
+    private readonly ObserverPoller _poller;
+    private readonly DataProviderSelection _data;
     private readonly LaunchOptions _launch;
-    private readonly ILogger<InteractiveConsole> _logger;
+    private bool _observing;
 
     /// <summary>Initializes the app.</summary>
-    public InteractiveConsole(AppState state, AgentBootstrapper bootstrapper, AgentTurnRunner runner, CommandDispatcher commands, ISessionStore sessions, LaunchOptions launch, ILogger<InteractiveConsole> logger)
+    public InteractiveConsole(AppState state, SessionDriver driver, ClassicPresenter presenter, ObserverPoller poller, DataProviderSelection data, LaunchOptions launch)
     {
         _state = state;
-        _bootstrapper = bootstrapper;
-        _runner = runner;
-        _commands = commands;
-        _sessions = sessions;
+        _driver = driver;
+        _presenter = presenter;
+        _poller = poller;
+        _data = data;
         _launch = launch;
-        _logger = logger;
     }
 
     /// <summary>Runs until the user exits. Returns the process exit code.</summary>
     public async Task<int> RunAsync()
     {
-        await _bootstrapper.InitializeAsync(_state, _launch).ConfigureAwait(false);
+        string? notice = await _driver.StartAsync(_state, _launch).ConfigureAwait(false);
         Console.CancelKeyPress += OnCancelKeyPress;
-        Render.Banner(_state.FakeMode, SessionIdentity.GetOrCreate(_state.Session));
+        Render.Banner(_state.FakeMode, SessionIdentity.GetOrCreate(_state.Session), _data.Provider, _data.Description);
+        if (_data.Warning is not null)
+        {
+            Render.Warn(_data.Warning);
+        }
 
+        if (notice is not null)
+        {
+            Render.Warn(notice);
+        }
+
+        _poller.Changed += OnObserved;
+        SyncObserver();
         while (!_state.ExitRequested)
         {
-            Render.Prompt(await _state.GetModeAsync().ConfigureAwait(false));
+            Render.Prompt(await _state.GetModeAsync().ConfigureAwait(false), _state.Role == SessionRole.Observer);
             string? input = Console.ReadLine();
             if (input is null)
             {
                 break;
             }
 
-            input = input.Trim();
-            if (input.Length == 0)
-            {
-                continue;
-            }
-
-            if (input.StartsWith('/'))
-            {
-                await _commands.DispatchAsync(input, _state).ConfigureAwait(false);
-                continue;
-            }
-
-            await RunTurnAsync(input).ConfigureAwait(false);
+            await _driver.HandleAsync(_state, _presenter, input).ConfigureAwait(false);
+            SyncObserver();
         }
 
-        await FlushAsync().ConfigureAwait(false);
-        Render.Info("Session saved. Goodbye.");
+        _poller.Stop();
+        await _driver.ShutdownAsync(_state).ConfigureAwait(false);
+        Render.Info(_state.Role == SessionRole.Driver ? "Session saved. Goodbye." : "Detached from the observed session. Goodbye.");
         return 0;
     }
 
-    private async Task RunTurnAsync(string input)
+    private void SyncObserver()
     {
-        using var cts = new CancellationTokenSource();
-        _state.RunCancellation = cts;
-        try
+        bool shouldObserve = _state.Role == SessionRole.Observer;
+        if (shouldObserve && !_observing)
         {
-            await _runner.RunTurnAsync(_state, input, cts.Token).ConfigureAwait(false);
+            _poller.Start(_state, TimeSpan.FromSeconds(1));
+            Render.Info("Following the driver's status file; tool calls and activity changes appear here as they happen.");
         }
-        finally
+        else if (!shouldObserve && _observing)
         {
-            _state.RunCancellation = null;
+            _poller.Stop();
         }
 
-        await AfterTurnAsync(input).ConfigureAwait(false);
+        _observing = shouldObserve;
     }
 
-    private async Task AfterTurnAsync(string input)
+    private void OnObserved(ObserverUpdate update)
     {
-        if (_state.Todos is { } todos)
+        if (update.ActivityChanged)
         {
-            Render.Todos(await todos.GetAllTodosAsync(_state.Session).ConfigureAwait(false));
+            string tool = update.Status.CurrentTool is null ? string.Empty : $" ({update.Status.CurrentTool})";
+            Render.Info($"[driver {update.Status.Instance}] {update.Status.Activity}{tool}, mode {update.Status.Mode}");
         }
 
-        if (_state.Factory.LoopEvaluator is { } evaluator)
+        foreach (ToolEvent tool in update.NewTools)
         {
-            IReadOnlyList<string> outstanding = await evaluator.OutstandingAsync(_state.Session).ConfigureAwait(false);
-            if (outstanding.Count > 0 && string.Equals(await _state.GetModeAsync().ConfigureAwait(false), AgentModes.Execute, StringComparison.OrdinalIgnoreCase))
-            {
-                Render.Warn("Loop budget exhausted or run interrupted. Still outstanding: " + string.Join("; ", outstanding));
-            }
+            Render.ToolCall(tool.Name, tool.Arguments, tool.Result);
         }
 
-        using (SessionEvaluationStateStore.UseSession(_state.Session))
+        if (update.SessionReloaded && update.NewTools.Count == 0 && !update.ActivityChanged)
         {
-            await SessionPersistence.SaveAsync(_state.Agent, _state.Session, _sessions, input).ConfigureAwait(false);
-        }
-    }
-
-    private async Task FlushAsync()
-    {
-        try
-        {
-            await SessionPersistence.SaveAsync(_state.Agent, _state.Session, _sessions, null).ConfigureAwait(false);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            _logger.LogWarning(ex, "Could not flush the session on exit");
+            Render.Info("[driver] session file updated (todos, history and evaluation state re-read).");
         }
     }
 
     private void OnCancelKeyPress(object? sender, ConsoleCancelEventArgs e)
     {
         e.Cancel = true;
-        if (_state.RunCancellation is { IsCancellationRequested: false } running)
+        if (SessionDriver.CancelRun(_state))
         {
-            running.Cancel();
             Render.Warn("\nCancelling the current run (press Ctrl+C again to exit)…");
             return;
         }
 
         Render.Info("\nExiting…");
-        FlushAsync().GetAwaiter().GetResult();
+        _poller.Stop();
+        _driver.ShutdownAsync(_state).GetAwaiter().GetResult();
         Environment.Exit(0);
     }
 }

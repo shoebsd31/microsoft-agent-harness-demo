@@ -33,6 +33,15 @@ public sealed class AppState
     /// <summary>Background tasks observed in tool calls.</summary>
     public BackgroundTaskTracker Tasks { get; } = new();
 
+    /// <summary>Whether this instance drives the session or only observes it.</summary>
+    public SessionRole Role { get; set; } = SessionRole.Driver;
+
+    /// <summary>Latest status file read while observing (null when driving).</summary>
+    public SessionStatus? ObservedStatus { get; set; }
+
+    /// <summary>True while an agent turn is in flight.</summary>
+    public bool IsRunning => RunCancellation is not null;
+
     /// <summary>Gets the mode provider of the agent.</summary>
     public AgentModeProvider? Modes => Agent.GetService<AgentModeProvider>();
 

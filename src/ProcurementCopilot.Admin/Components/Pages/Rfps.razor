@@ -1,0 +1,102 @@
+@page "/rfps"
+@rendermode InteractiveServer
+@using ProcurementCopilot.Application.Abstractions
+@inject IProcurementAdminStore Store
+
+<PageTitle>RFPs</PageTitle>
+<h1>RFPs</h1>
+
+@if (error is not null) { <div class="alert alert-danger">@error</div> }
+
+<button class="btn btn-primary mb-3" @onclick="New">New RFP</button>
+
+<table class="table table-sm table-striped">
+    <thead><tr><th>Id</th><th>Title</th><th>Product</th><th>Qty</th><th>Currency</th><th>Status</th><th>Bids</th><th></th></tr></thead>
+    <tbody>
+    @foreach (var r in rfps)
+    {
+        <tr>
+            <td>@r.RfpId</td><td>@r.Title</td><td>@r.ProductName (@r.ProductId)</td><td>@r.Quantity</td><td>@r.CurrencyCode</td><td>@r.Status</td><td>@r.BidCount</td>
+            <td><button class="btn btn-sm btn-outline-secondary" @onclick="() => Edit(r)">Edit</button>
+                <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAsync(r)">Delete</button></td>
+        </tr>
+    }
+    </tbody>
+</table>
+
+@if (editing is not null)
+{
+    <div class="card mt-3"><div class="card-body">
+        <h5>@(isNew ? "New RFP" : "Edit " + editing.RfpId)</h5>
+        <EditForm Model="editing" OnValidSubmit="SaveAsync">
+            <div class="row g-2">
+                <div class="col-md-3"><label class="form-label">RFP id (RFP-YYYY-NNN)</label><InputText class="form-control" @bind-Value="editing.RfpId" disabled="@(!isNew)" /></div>
+                <div class="col-md-9"><label class="form-label">Title</label><InputText class="form-control" @bind-Value="editing.Title" /></div>
+                <div class="col-12"><label class="form-label">Description</label><InputTextArea class="form-control" rows="3" @bind-Value="editing.Description" /></div>
+                <div class="col-md-4"><label class="form-label">Product search</label>
+                    <input class="form-control" @bind="productTerm" @bind:after="SearchProductsAsync" placeholder="name or number" />
+                    @if (products.Count > 0)
+                    {
+                        <select class="form-select mt-1" @onchange="e => editing.ProductId = int.Parse((string)e.Value!)">
+                            @foreach (var p in products) { <option value="@p.ProductId" selected="@(p.ProductId == editing.ProductId)">@p.Name (@p.ProductNumber, @p.Subcategory)</option> }
+                        </select>
+                    }
+                </div>
+                <div class="col-md-2"><label class="form-label">Product id</label><InputNumber class="form-control" @bind-Value="editing.ProductId" /></div>
+                <div class="col-md-2"><label class="form-label">Quantity</label><InputNumber class="form-control" @bind-Value="editing.Quantity" /></div>
+                <div class="col-md-2"><label class="form-label">Currency</label><InputText class="form-control" @bind-Value="editing.CurrencyCode" /></div>
+                <div class="col-md-2"><label class="form-label">Status</label>
+                    <InputSelect class="form-select" @bind-Value="editing.Status"><option>Open</option><option>Closed</option></InputSelect></div>
+                <div class="col-md-4"><label class="form-label">Category</label><InputText class="form-control" @bind-Value="editing.Category" /></div>
+                <div class="col-md-8"><label class="form-label">Required certifications (comma separated)</label><InputText class="form-control" @bind-Value="editing.RequiredCertifications" /></div>
+                <div class="col-md-2"><label class="form-label">W price</label><InputNumber class="form-control" @bind-Value="editing.WeightPrice" /></div>
+                <div class="col-md-2"><label class="form-label">W lead time</label><InputNumber class="form-control" @bind-Value="editing.WeightLeadTime" /></div>
+                <div class="col-md-2"><label class="form-label">W warranty</label><InputNumber class="form-control" @bind-Value="editing.WeightWarranty" /></div>
+                <div class="col-md-2"><label class="form-label">W technical</label><InputNumber class="form-control" @bind-Value="editing.WeightTechnical" /></div>
+                <div class="col-md-2"><label class="form-label">W sustainability</label><InputNumber class="form-control" @bind-Value="editing.WeightSustainability" /></div>
+            </div>
+            <div class="mt-3">
+                <button type="submit" class="btn btn-success">Save</button>
+                <button type="button" class="btn btn-secondary" @onclick="() => editing = null">Cancel</button>
+            </div>
+        </EditForm>
+    </div></div>
+}
+
+@code {
+    private List<AdminRfp> rfps = [];
+    private AdminRfp? editing;
+    private bool isNew;
+    private string? error;
+    private string productTerm = string.Empty;
+    private IReadOnlyList<ProductPick> products = [];
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        try { rfps = (await Store.ListRfpsAsync()).ToList(); error = null; }
+        catch (Microsoft.Data.SqlClient.SqlException ex) { error = ex.Message; }
+    }
+
+    private void New() { editing = new AdminRfp { RfpId = "RFP-2026-0" + (rfps.Count + 18).ToString("00") }; isNew = true; products = []; }
+
+    private void Edit(AdminRfp r) { editing = new AdminRfp { RfpId = r.RfpId, Title = r.Title, Description = r.Description, ProductId = r.ProductId, ProductName = r.ProductName, Quantity = r.Quantity, CurrencyCode = r.CurrencyCode, Status = r.Status, Category = r.Category, WeightPrice = r.WeightPrice, WeightLeadTime = r.WeightLeadTime, WeightWarranty = r.WeightWarranty, WeightTechnical = r.WeightTechnical, WeightSustainability = r.WeightSustainability, RequiredCertifications = r.RequiredCertifications }; isNew = false; products = []; }
+
+    private async Task SearchProductsAsync()
+    {
+        if (productTerm.Length >= 2) { products = await Store.SearchProductsAsync(productTerm); }
+    }
+
+    private async Task SaveAsync()
+    {
+        try { await Store.SaveRfpAsync(editing!); editing = null; await LoadAsync(); }
+        catch (Microsoft.Data.SqlClient.SqlException ex) { error = ex.Message; }
+    }
+
+    private async Task DeleteAsync(AdminRfp r)
+    {
+        try { await Store.DeleteRfpAsync(r.RfpId); await LoadAsync(); }
+        catch (Microsoft.Data.SqlClient.SqlException ex) { error = ex.Message; }
+    }
+}

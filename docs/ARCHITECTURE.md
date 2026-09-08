@@ -29,6 +29,7 @@ flowchart TB
         RO["7 read-only tools"]
         SE["2 side-effecting tools<br/>ModeGuard → ApprovalRequired"]
         SH["shell<br/>ShellCommandPolicy → ApprovalRequired"]
+        QR["query_readonly (SQL backend only)<br/>SqlQueryPolicy → ApprovalRequired → copilot_reader"]
         WS["HostedWebSearchTool<br/>when supported"]
     end
     CA --> TA["ToolApprovalAgent<br/>AutoApprovalRules guarded by ApprovalPolicy"]
@@ -57,11 +58,13 @@ Every row of the Harness capability matrix, the class that implements it and the
 | 4.9 | Web search | `DisableWebSearch = !(Agent:EnableWebSearch && WebSearchSupport.IsSupported(client))`; unsupported client → warning, no crash; `HostedWebSearchTool` also given to market-research | `HarnessAgentFactoryTests.BuildOptions_ClientWithoutHostedSearch_DisablesWebSearchInsteadOfCrashing`, `BackgroundAgentTests.Definitions_ChildToolSets_…` |
 | 4.10 | Agent Skills | `Skills/SkillsSourceFactory` → `AgentFileSkillsSource(AppContext.BaseDirectory/skills)`, refuses the current working directory, no script runner; `skills/rfp-scoring`, `compliance-check`, `award-memo` | `SkillsDiscoveryTests.Source_ConfiguredPath_DiscoversExactlyThreeSkills`, `Create_CurrentWorkingDirectory_IsRefused` |
 | 4.11 | Background agents | `Background/BackgroundAgentFactory` (two plain `ChatClientAgent`s with narrow tool sets), `ConcurrencyLimitedAgent` (`MaxParallel`), `TimeoutAgent` (`TimeoutSeconds`), `BackgroundAgentsProviderOptions.WaitTimeout`; `/tasks` | `BackgroundAgentTests` (4) |
+| 4.12b | Read-only SQL (`query_readonly`) | `Application/Security/SqlQueryPolicy` (single SELECT over `copilot.*`, no comments/variables/DML/EXEC/system objects), `Agent/Tools/QueryTools.cs` (approval-gated, audited, row cap), `Infrastructure/SqlServer/SqlReadOnlyQueryExecutor` (`EXECUTE AS USER = copilot_reader`, timeout, `REVERT`); registered only when the SQL backend is active | `SqlQueryPolicyTests` (35 cases), `QueryReadOnlyToolTests` (6), `SqlBackendTests.QueryExecutor_ImpersonatesReaderWithSelectOnCopilotOnly` |
 | 4.12 | Shell execution | `Application/Security/ShellCommandPolicy` + `ShellCommandTokenizer` (allowlist, parser-level denials, workspace confinement), `Shell/ConfinedShellTool` (`shell`, approval-gated, timeout, 32 KB cap, audited), `Shell/LocalShellRunner` over `LocalShellExecutor` (stateless, cwd = workspace, second `ShellPolicy` layer), `Shell/ShellSelector` | `ShellCommandPolicyTests` (49 table-driven cases + 3 facts), `ConfinedShellToolTests` (5) |
 | 4.13 | Looping | `Looping/AllBidsScoredEvaluator` (predicate: every bid scored + every compliance hit dispositioned, execute mode only, reports outstanding items), `Looping/JudgeEvaluatorFactory` (`AIJudgeLoopEvaluator`, `Agent:EnableJudge`), `LoopAgentOptions.MaxIterations` from `Agent:MaxLoopIterations`; console prints outstanding items on exhaustion | `LoopEvaluatorTests` (4, incl. `Run_AgentNeverFinishes_StopsAtMaxIterations`), `HarnessAgentFactoryTests.BuildOptions_JudgeEnabledWithClient_AddsJudgeEvaluator` |
-| 4.14 | Terminal UX | `Console/Runtime/InteractiveConsole`, `AgentTurnRunner` (streaming, collapsed tool lines, loop feedback), `Ui/ApprovalPrompt`, `Commands/*`, Ctrl+C handling, `--fake`, `--self-check` | exercised by `--self-check` in `scripts/verify.*` and the piped fake run in `docs/DEMO_SCRIPT.md` |
+| 4.14 | Terminal UX | `Console/Runtime/AgentTurnRunner` streams one turn into an `ITurnPresenter`; two presenters: `Tui/*` (Terminal.Gui full screen: transcript, prompt, live Todos / Tasks / Context / Traces panels, approval dialog, F-key shortcuts) and `Ui/ClassicPresenter` (Spectre line UI, `--classic` or redirected stdio). `Runtime/SessionDriver` handles input for both; `SessionCoordinator` + `SessionLock` + `StatusPublisher` implement the driver/observer model (`--attach`, `/takeover`, `/detach`, `/whois`); `ObserverPoller` follows `<id>.status.json` and the session file. `Commands/*`, Ctrl+C / Esc handling, `--fake`, `--self-check` | `tests/ProcurementCopilot.Console.Tests` (lock, status, launch flags, Spectre capture); `--self-check` in `scripts/verify.*`; the piped fake run and the observer walkthrough in `docs/TESTING_GUIDE.md` |
 | §5 | Prompts | `Agent/Prompts/*.md` embedded resources via `PromptCatalog`; harness addendum appended to `HarnessAgent.DefaultInstructions` | `PromptResourceTests` (2) |
-| §6 | Seeded data | `data/*.json`, `data/sanctions.csv`, `Infrastructure/Data/SeedDataStore` (source-generated JSON, validated on load) | `SeedDataStoreTests`, `BidScoringServiceTests.ScoreAll_SeededRfp_ProducesPinnedScores` |
+| §6 | Seeded data | JSON: `data/*.json`, `data/sanctions.csv`, `Infrastructure/Data/SeedDataStore`. SQL Server: `database/migrations/0001…0004`, `Infrastructure/SqlServer/*` (Dapper repositories over `copilot.*` views, `SqlAwardRecorder` over `copilot.usp_RecordAwardRecommendation`, `SqlMigrationRunner`, `ProcurementAdminStore`), `DataProviderSelector` (`Data:Provider` Auto/Json/SqlServer) | `SeedDataStoreTests`, `BidScoringServiceTests`, `SqlBackendTests` (4, skipped without a database) |
+| — | Admin app | `src/ProcurementCopilot.Admin` (Blazor Server) over `IProcurementAdminStore`; `--migrate` / `--status` flags used by `scripts/apply-migrations.*` | manual smoke: every page returns 200 against the migrated database |
 
 ## Layers and dependency flow
 
@@ -73,9 +76,16 @@ Testing ──► Application   (fakes; referenced by tests and by Console for -
 
 - **Domain** has no NuGet dependencies. `Result<T>` replaces exceptions for business rules. `BidScoringService` is pure and its seeded outputs are pinned in tests.
 - **Application** holds options, the five security policies, tool DTOs (source-generated JSON) and the use-case services. It depends only on `Microsoft.Extensions.*` abstractions.
-- **Infrastructure** implements repositories (seed files), `ISessionStore`, `IOutbox`, `IAuditLog`, `IChatClientFactory` (OpenAI Responses client against the Azure v1 endpoint), telemetry and Serilog.
+- **Infrastructure** implements repositories (JSON seed files, or SQL Server through Dapper over the `copilot` views), `IAwardRecorder` (JSON file, or the stored procedure that creates a purchase order), `IReadOnlyQueryExecutor`, `SqlMigrationRunner`, `IProcurementAdminStore`, `ISessionStore`, `IOutbox`, `IAuditLog`, `IChatClientFactory` (OpenAI Responses client against the Azure v1 endpoint), telemetry (including SqlClient spans) and Serilog. `DataProviderSelector` picks the backend at start-up.
 - **Agent** composes the harness. Nothing is `new`ed outside DI except in `HarnessAgentFactory.BuildOptions` (the composition root for the harness itself).
 - **Console** owns the UX and the process lifetime (options validation and telemetry start are invoked explicitly so the console controls Ctrl+C).
+
+## Data backends
+
+`AddDataBackend` reads `Data:Provider`. `Json` and `SqlServer` are explicit; `Auto` probes the connection (5 s) and checks that the
+`copilot` schema exists, falling back to JSON with a warning that the banner, `--self-check` and `/data` show. Both backends implement
+the same Domain repository interfaces, so tools, services and tests are unchanged; the SQL backend additionally registers the
+`query_readonly` executor and the purchase-order award recorder. Schema, migrations and security: [DATABASE.md](DATABASE.md).
 
 ## Session state
 
@@ -92,7 +102,7 @@ console commands supply it with `SessionEvaluationStateStore.UseSession`.
 
 ## Data flow of one execute turn
 
-1. `AgentTurnRunner` streams `RunStreamingAsync`; text is written as it arrives, `FunctionCallContent`/`FunctionResultContent` pairs become one collapsed line.
+1. `AgentTurnRunner` streams `RunStreamingAsync` into the active `ITurnPresenter`; text is shown as it arrives, `FunctionCallContent`/`FunctionResultContent` pairs become one collapsed line, and every event is also published to `<id>.status.json` for attached observers.
 2. Read tools query `RfpQueryService`, `BidEvaluationService`, `ComplianceService`; vendor-authored text is wrapped by `UntrustedDataEnvelope`.
 3. Side-effecting tools pass `ModeGuardMiddleware` (execute mode only) and `ApprovalRequiredAIFunction`; pending approvals end the stream, `ApprovalPrompt` collects the decision, audits it and the runner sends the response back.
 4. `ClarificationService` / `AwardService` write through `IOutbox` (confined by `WorkspacePathPolicy`) and `IAuditLog`.

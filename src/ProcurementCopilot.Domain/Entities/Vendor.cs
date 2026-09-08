@@ -17,6 +17,18 @@ public sealed record Vendor(
     int YearsTrading,
     string Notes)
 {
+    /// <summary>AdventureWorks credit rating 1 (excellent) to 5 (poor), when known.</summary>
+    public int? CreditRating { get; init; }
+
+    /// <summary>AdventureWorks preferred-vendor flag, when known.</summary>
+    public bool? IsPreferred { get; init; }
+
+    /// <summary>Whether the vendor is active in the vendor master. Defaults to <see langword="true"/>.</summary>
+    public bool IsActive { get; init; } = true;
+
+    /// <summary>Contact email address, when known (redacted in logs).</summary>
+    public string? ContactEmail { get; init; }
+
     /// <summary>Returns <see langword="true"/> when the vendor holds the named certification (case-insensitive).</summary>
     public bool Holds(string certification) =>
         Certifications.Any(c => string.Equals(c, certification, StringComparison.OrdinalIgnoreCase));

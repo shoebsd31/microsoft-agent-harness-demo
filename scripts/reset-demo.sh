@@ -7,16 +7,19 @@
 #
 #   --sessions   also delete the persisted sessions (LOCALAPPDATA or ~/.local/share ProcurementCopilot/sessions)
 #   --all        --sessions plus the TestResults folders
+#   --database   also remove the purchase orders and award recommendations the copilot wrote to SQL Server
+#                (runs database/maintenance/reset-demo-awards.sql with sqlcmd; override with SQL_SERVER / SQL_DATABASE)
 #   --dry-run    show what would be deleted without deleting
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CONSOLE_BIN="$ROOT/src/ProcurementCopilot.Console/bin"
 
-sessions=0; all=0; dry=0
+sessions=0; all=0; dry=0; database=0
 for arg in "$@"; do
   case "$arg" in
     --sessions) sessions=1 ;;
     --all) all=1; sessions=1 ;;
+    --database) database=1 ;;
     --dry-run|-n) dry=1 ;;
     *) echo "unknown option: $arg"; echo "usage: $0 [--sessions] [--all] [--dry-run]"; exit 2 ;;
   esac
@@ -49,6 +52,12 @@ for path in "${targets[@]:-}"; do
   fi
   deleted=$((deleted + 1))
 done
+
+if [ "$database" -eq 1 ]; then
+  script="$ROOT/database/maintenance/reset-demo-awards.sql"
+  if [ "$dry" -eq 1 ]; then echo "Would run $script against ${SQL_SERVER:-localhost\SQLEXPRESS}/${SQL_DATABASE:-AdventureWorks2019}"
+  else sqlcmd -S "${SQL_SERVER:-localhost\SQLEXPRESS}" -E -d "${SQL_DATABASE:-AdventureWorks2019}" -C -b -i "$script"; fi
+fi
 
 if [ "$deleted" -eq 0 ]; then
   echo "Nothing to reset: no runtime folders found."
